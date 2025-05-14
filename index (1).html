@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Respiración 4-7-8</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #2c3e50; /* Azul oscuro noche */
+            color: #ecf0f1; /* Blanco nube */
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #container {
+            background-color: #34495e; /* Azul medianoche */
+            padding: 25px 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 90%;
+        }
+        h1 {
+            color: #e74c3c; /* Rojo coral */
+            margin-bottom: 15px;
+            font-size: 2.2em;
+        }
+        .instructions {
+            font-size: 0.95em;
+            color: #bdc3c7; /* Gris claro */
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        #phaseDisplay {
+            font-size: 2.3em;
+            font-weight: bold;
+            margin: 25px 0;
+            padding: 25px;
+            border: 3px solid transparent;
+            border-radius: 10px;
+            min-width: 280px;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease-in-out;
+        }
+        .initial {
+            color: #95a5a6; /* Gris */
+            border-color: #7f8c8d; /* Gris oscuro */
+            background-color: #4a6178; /* Un poco más claro que el fondo del contenedor */
+        }
+        .inhale {
+            color: #2ecc71; /* Verde esmeralda */
+            border-color: #27ae60; /* Verde más oscuro */
+            background-color: #3b7b54; /* Fondo verde oscuro */
+        }
+        .hold {
+            color: #f1c40f; /* Amarillo girasol */
+            border-color: #f39c12; /* Naranja */
+            background-color: #a17e0a; /* Fondo amarillo oscuro */
+        }
+        .exhale {
+            color: #3498db; /* Azul Peter River */
+            border-color: #2980b9; /* Azul Belize Hole */
+            background-color: #2c6a9c; /* Fondo azul oscuro */
+        }
+        button {
+            background-color: #e74c3c; /* Rojo coral (para iniciar) */
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.3em;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button.stop-button {
+            background-color: #95a5a6; /* Gris para detener */
+        }
+        #status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #bdc3c7; /* Gris claro */
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Respiración 4-7-8</h1>
+        <p class="instructions">
+            Esta técnica te ayudará a relajarte. Presiona "Iniciar".<br>
+            1. <strong>Inhala</strong> por la nariz (4 segundos).<br>
+            2. <strong>Sostén</strong> la respiración (7 segundos).<br>
+            3. <strong>Exhala</strong> completamente por la boca (8 segundos).<br>
+            La aplicación te guiará con texto y zumbidos.
+        </p>
+        <div id="phaseDisplay" class="initial">Presiona Iniciar</div>
+        <button id="controlButton">Iniciar</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const phaseDisplay = document.getElementById('phaseDisplay');
+        const controlButton = document.getElementById('controlButton');
+        const statusDisplay = document.getElementById('status');
+
+        let audioCtx;
+        let currentTimeoutId = null;
+        let isRunning = false;
+        let cycleCount = 0;
+
+        const inhaleTime = 4000; // 4 segundos
+        const holdTime = 7000;   // 7 segundos
+        const exhaleTime = 8000;  // 8 segundos
+
+        // Inicializar AudioContext (preferiblemente con interacción del usuario)
+        function initAudio() {
+            if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.error("Web Audio API no es soportada en este navegador.", e);
+                    statusDisplay.textContent = "Audio no disponible en este navegador.";
+                }
+            }
+        }
+
+        // Reproducir un zumbido/tono corto
+        function playSound(frequency = 300, duration = 0.15, type = 'sine', volume = 0.3) {
+            if (!audioCtx) return;
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.type = type; // 'sine', 'square', 'sawtooth', 'triangle'
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+
+            gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        function updatePhase(text, className, soundFreq, soundType = 'sine') {
+            phaseDisplay.textContent = text;
+            phaseDisplay.className = ''; // Reset classes
+            phaseDisplay.classList.add(className); // Add new class
+            playSound(soundFreq, 0.15, soundType);
+        }
+
+        function startInhale() {
+            updatePhase(`Inhala (${inhaleTime/1000}s)`, 'inhale', 330, 'sine'); // Tono suave ascendente
+            statusDisplay.textContent = `Ciclo: ${cycleCount + 1}`;
+            currentTimeoutId = setTimeout(startHold, inhaleTime);
+        }
+
+        function startHold() {
+            updatePhase(`Sostén (${holdTime/1000}s)`, 'hold', 440, 'square'); // Tono medio, más tipo "alerta"
+            currentTimeoutId = setTimeout(startExhale, holdTime);
+        }
+
+        function startExhale() {
+            updatePhase(`Exhala (${exhaleTime/1000}s)`, 'exhale', 220, 'sine'); // Tono suave descendente
+            currentTimeoutId = setTimeout(() => {
+                cycleCount++;
+                startInhale(); // Iniciar el próximo ciclo
+            }, exhaleTime);
+        }
+
+        function startExercise() {
+            if (isRunning) return;
+            initAudio(); // Asegurar que AudioContext esté inicializado
+            isRunning = true;
+            controlButton.textContent = "Detener";
+            controlButton.classList.add('stop-button');
+            cycleCount = 0;
+            statusDisplay.textContent = "Ejercicio iniciado...";
+            startInhale();
+        }
+
+        function stopExercise() {
+            if (!isRunning) return;
+            isRunning = false;
+            clearTimeout(currentTimeoutId);
+            currentTimeoutId = null;
+            phaseDisplay.textContent = "Ejercicio Detenido";
+            phaseDisplay.className = 'initial';
+            controlButton.textContent = "Iniciar";
+            controlButton.classList.remove('stop-button');
+            statusDisplay.textContent = `Completaste ${cycleCount} ciclo(s). ¡Buen trabajo!`;
+            if (cycleCount === 0 && currentTimeoutId === null && phaseDisplay.textContent === "Ejercicio Detenido") {
+                 statusDisplay.textContent = "Ejercicio detenido antes de completar un ciclo.";
+            }
+        }
+
+        controlButton.addEventListener('click', () => {
+            if (!isRunning) {
+                startExercise();
+            } else {
+                stopExercise();
+            }
+        });
+
+        // Advertir al usuario si intenta cerrar la página mientras el ejercicio está en curso
+        window.addEventListener('beforeunload', (event) => {
+            if (isRunning) {
+                event.preventDefault(); // Requerido por algunos navegadores
+                event.returnValue = ''; // Mensaje estándar del navegador
+            }
+        });
+    </script>
+</body>
+</html>
